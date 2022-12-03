@@ -32,7 +32,7 @@ impl KeyExtractor for BiliUserToken {
 
     fn response_error_content(
         &self,
-        negative: &governor::NotUntil<governor::clock::QuantaInstant>,
+        negative: &governor::gcra::NotUntil<governor::clock::quanta::QuantaInstant>,
     ) -> (String, ContentType) {
         let wait_time = negative
             .wait_time_from(DefaultClock::default().now())

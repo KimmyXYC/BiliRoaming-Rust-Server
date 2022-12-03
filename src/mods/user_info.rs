@@ -105,8 +105,8 @@ pub async fn get_blacklist_info(
 ) -> Result<bool, EType> {
     fn timestamp_to_time(timestamp: &u64) -> String {
         let dt = Utc
-            .timestamp(*timestamp as i64, 0)
-            .with_timezone(&FixedOffset::east(8 * 3600));
+            .timestamp_opt(*timestamp as i64, 0)
+            .with_timezone(&FixedOffset::east_opt(8 * 3600));
         dt.format(r#"%Y年%m月%d日 %H:%M解封"#).to_string()
     }
     // let uid = &user_info.uid;
