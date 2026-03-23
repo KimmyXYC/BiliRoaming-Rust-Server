@@ -742,6 +742,14 @@ pub async fn handle_th_subtitle_request(req: &HttpRequest, _: bool, _: bool) -> 
     build_result_response!(resp)
 }
 
+fn is_api_accesskey_open(config: &BiliConfig, area_num: u8) -> bool {
+    config
+        .api_assesskey_open
+        .get(&area_num.to_string())
+        .copied()
+        .unwrap_or(false)
+}
+
 pub async fn handle_api_access_key_request(req: &HttpRequest) -> HttpResponse {
     let (redis_pool, config, bilisender) = req
         .app_data::<(Pool, BiliConfig, Arc<Sender<BackgroundTaskType>>)>()
@@ -773,6 +781,10 @@ pub async fn handle_api_access_key_request(req: &HttpRequest) -> HttpResponse {
             build_response!(-412, "无签名参数");
         }
     };
+
+    if !is_api_accesskey_open(config, area_num) {
+        build_response!(-404, "API is disabled for this area");
+    }
 
     let user_agent = "User-Agent:Mozilla/5.0 (Linux; Android 4.1.2; Nexus 7 Build/JZ054K) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.166 Safari/535.19";
 
@@ -865,9 +877,23 @@ pub async fn errorurl_reg(url: &str) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_api_health_request, normalize_search_response};
+    use super::{
+        handle_api_access_key_request, handle_api_health_request, normalize_search_response,
+    };
+    use crate::mods::types::{BackgroundTaskType, BiliConfig};
     use actix_web::{body::to_bytes, test::TestRequest};
+    use async_channel::bounded;
+    use deadpool_redis::{Config as RedisConfig, Runtime};
     use serde_json::{json, Value};
+    use std::sync::Arc;
+
+    fn test_config() -> BiliConfig {
+        let mut config: BiliConfig =
+            serde_json::from_str(include_str!("../../config.example.json"))
+                .expect("config.example.json should stay valid");
+        config.api_sign = "test-sign".to_string();
+        config
+    }
 
     #[actix_web::test]
     async fn api_health_returns_default_runtime_snapshot() {
@@ -890,6 +916,28 @@ mod tests {
         let body_json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body_json["code"].as_i64().unwrap(), 400);
+    }
+
+    #[actix_web::test]
+    async fn api_accesskey_rejects_disabled_area() {
+        let config = test_config();
+        let pool = RedisConfig::from_url("redis://127.0.0.1/")
+            .create_pool(Some(Runtime::Tokio1))
+            .unwrap();
+        let (sender, _receiver) = bounded::<BackgroundTaskType>(1);
+        let req = TestRequest::with_uri("/api/accesskey?area_num=1&sign=test-sign")
+            .app_data((pool, config, Arc::new(sender)))
+            .to_http_request();
+
+        let resp = handle_api_access_key_request(&req).await;
+        let body = to_bytes(resp.into_body()).await.unwrap();
+        let body_json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body_json["code"].as_i64().unwrap(), -404);
+        assert!(body_json["message"]
+            .as_str()
+            .unwrap()
+            .contains("API is disabled for this area"));
     }
 
     #[test]
