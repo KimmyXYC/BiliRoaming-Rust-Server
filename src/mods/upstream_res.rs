@@ -824,7 +824,6 @@ pub async fn get_upstream_bili_playurl(
     }
     if params.is_th {
         query_vec.push(("s_locale", "zh_SG"));
-        query_vec.push(("prefer_code_type", "1")); // prefer h265 codec
     }
 
     query_vec.sort_by_key(|v| v.0);
@@ -1115,7 +1114,6 @@ pub async fn get_upstream_bili_playurl_background(
     }
     if params.is_th {
         query_vec.push(("s_locale", "zh_SG"));
-        query_vec.push(("prefer_code_type", "1")); // prefer h265 codec
     }
 
     query_vec.sort_by_key(|v| v.0);
