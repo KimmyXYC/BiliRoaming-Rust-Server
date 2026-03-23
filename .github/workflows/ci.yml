@@ -15,9 +15,6 @@ on:
       - '**.yml'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -35,27 +32,12 @@ jobs:
 
   build:
     name: Build the binary file
-    if: ${{ github.event_name != 'pull_request' && success() }}
     runs-on: ubuntu-latest
     needs:
       - check
-    outputs:
-      git_hash: ${{ steps.meta.outputs.git_hash }}
-      git_message: ${{ steps.meta.outputs.git_message }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Read git metadata
-        id: meta
-        shell: bash
-        run: |
-          echo "git_hash=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
-          {
-            echo "git_message<<EOF"
-            git log -1 --pretty=%B
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Build
         run: |
@@ -67,55 +49,9 @@ jobs:
             sh -lc 'cd /workdir && cargo build --profile=fast -vv --target=x86_64-unknown-linux-musl'
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: biliroaming-rust-server-${{ github.run_number }}
+          name: biliroaming-rust-server-${{ github.ref_name }}-${{ github.run_number }}
           path: ./target/x86_64-unknown-linux-musl/fast/biliroaming_rust_server
           if-no-files-found: error
-
-  alpha:
-    name: Upload the Alpha test version file
-    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
-    needs:
-      - build
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: biliroaming-rust-server-${{ github.run_number }}
-
-      - name: Update Alpha Release
-        uses: mini-bomba/create-github-release@v1.2.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: true
-          tag: alpha-releases
-          name: Alpha-Release
-          body: |
-            This automatic prerelease is built from commit ${{ needs.build.outputs.git_hash }} and was triggered by @${{ github.actor }}
-            [Github Actions workflow run that built this prerelease](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            Commit message:
-            ${{ needs.build.outputs.git_message }}
-          files: |
-            ./biliroaming_rust_server
-          clear_attachments: true
-
-  release:
-    name: Upload the binary file when it is released
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: biliroaming-rust-server-${{ github.run_number }}
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ./biliroaming_rust_server
+          retention-days: 30
