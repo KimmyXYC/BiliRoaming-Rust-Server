@@ -448,6 +448,7 @@ pub async fn handle_search_request(req: &HttpRequest, is_app: bool, is_th: bool)
         _ => "",
     };
     params.pn = query.get("pn").unwrap_or("1");
+    params.type_param = query.get("type").unwrap_or("7");
     params.fnval = query.get("fnval").unwrap_or("976");
     params.keyword = query.get("keyword").unwrap_or("null");
 

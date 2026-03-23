@@ -1247,80 +1247,8 @@ pub async fn get_upstream_bili_search(
     let req_type = ReqType::Search(Area::new(params.area_num as u8), params.is_app);
     let api = req_type.get_api(config);
     let (proxy_open, proxy_url) = req_type.get_proxy(config);
-    let dt = Local::now();
-    let ts = dt.timestamp_millis() as u64;
-    let ts_string = ts.to_string();
-    let mut query_vec: Vec<(String, String)>;
-    if params.is_th {
-        query_vec = vec![
-            // ("access_key".to_string(), access_key.to_string()),
-            ("appkey".to_string(), params.appkey.to_string()),
-            ("build".to_string(), params.build.to_string()),
-            ("c_locale".to_string(), "zh_SG".to_string()),
-            ("channel".to_string(), "master".to_string()),
-            ("device".to_string(), params.device.to_string()),
-            ("disable_rcmd".to_string(), "0".to_string()),
-            ("fnval".to_string(), params.fnval.to_string()),
-            ("fnver".to_string(), "0".to_string()),
-            ("fourk".to_string(), "1".to_string()),
-            ("highlight".to_string(), "1".to_string()),
-            ("keyword".to_string(), params.keyword.to_string()),
-            ("lang".to_string(), "hans".to_string()),
-            ("mobi_app".to_string(), "bstar_a".to_string()),
-            ("platform".to_string(), "android".to_string()),
-            ("pn".to_string(), params.pn.to_string()),
-            ("ps".to_string(), "20".to_string()),
-            ("qn".to_string(), "120".to_string()),
-            ("s_locale".to_string(), "zh_SG".to_string()),
-            ("sim_code".to_string(), "52004".to_string()),
-            ("ts".to_string(), ts_string.to_string()),
-            ("type".to_string(), "7".to_string()),
-        ];
-        if !params.access_key.is_empty() {
-            query_vec.push(("access_key".to_string(), params.access_key.to_string()));
-        }
-        if !params.statistics.is_empty() {
-            query_vec.push(("statistics".to_string(), params.statistics.to_string()));
-        }
-    } else {
-        if params.is_app {
-            query_vec = vec![
-                ("access_key".to_string(), params.access_key.to_string()),
-                ("appkey".to_string(), params.appkey.to_string()),
-                ("build".to_string(), params.build.to_string()),
-                ("c_locale".to_string(), "zh_CN".to_string()),
-                ("channel".to_string(), "master".to_string()),
-                ("device".to_string(), params.device.to_string()),
-                ("disable_rcmd".to_string(), "0".to_string()),
-                ("fnval".to_string(), "4048".to_string()),
-                ("fnver".to_string(), "0".to_string()),
-                ("fourk".to_string(), "1".to_string()),
-                ("highlight".to_string(), "1".to_string()),
-                ("keyword".to_string(), params.keyword.to_string()),
-                ("mobi_app".to_string(), params.mobi_app.to_string()),
-                ("platform".to_string(), params.platform.to_string()),
-                ("pn".to_string(), params.pn.to_string()),
-                ("ps".to_string(), "20".to_string()),
-                ("qn".to_string(), "120".to_string()),
-                ("s_locale".to_string(), "zh_CN".to_string()),
-                ("ts".to_string(), ts_string.to_string()),
-                ("type".to_string(), "7".to_string()),
-            ];
-            if !params.statistics.is_empty() {
-                query_vec.push(("statistics".to_string(), params.statistics.to_string()));
-            }
-        } else {
-            query_vec = raw_query.clone().into_pairs();
-        }
-    }
-
-    query_vec.sort_by_key(|v| v.0.clone());
-
-    let signed_url =  if !params.is_app {
-        format!("{}?{}", api, raw_query)
-    }else{
-        build_signed_url!(api, query_vec, params.appsec).0
-    };
+    let ts_string = Local::now().timestamp_millis().to_string();
+    let signed_url = build_search_request_url(params, raw_query, api, &ts_string);
 
     match async_getwebpage(
         &signed_url,
@@ -1385,6 +1313,165 @@ pub async fn get_upstream_bili_search(
             .await;
             Err(EType::ServerNetworkError("连接上游失败"))
         }
+    }
+}
+
+fn build_search_request_url(
+    params: &SearchParams<'_>,
+    raw_query: &QString,
+    api: &str,
+    ts_string: &str,
+) -> String {
+    if !params.is_app {
+        return format!("{api}?{raw_query}");
+    }
+
+    let mut query_vec: Vec<(String, String)> = if params.is_th {
+        vec![
+            ("appkey".to_string(), params.appkey.to_string()),
+            ("build".to_string(), params.build.to_string()),
+            ("c_locale".to_string(), "zh_SG".to_string()),
+            ("channel".to_string(), "master".to_string()),
+            ("device".to_string(), params.device.to_string()),
+            ("disable_rcmd".to_string(), "0".to_string()),
+            ("fnval".to_string(), params.fnval.to_string()),
+            ("fnver".to_string(), "0".to_string()),
+            ("fourk".to_string(), "1".to_string()),
+            ("highlight".to_string(), "1".to_string()),
+            ("keyword".to_string(), params.keyword.to_string()),
+            ("lang".to_string(), "hans".to_string()),
+            ("mobi_app".to_string(), "bstar_a".to_string()),
+            ("platform".to_string(), "android".to_string()),
+            ("pn".to_string(), params.pn.to_string()),
+            ("ps".to_string(), "20".to_string()),
+            ("qn".to_string(), "120".to_string()),
+            ("s_locale".to_string(), "zh_SG".to_string()),
+            ("sim_code".to_string(), "52004".to_string()),
+            ("ts".to_string(), ts_string.to_string()),
+            ("type".to_string(), params.type_param.to_string()),
+        ]
+    } else {
+        vec![
+            ("access_key".to_string(), params.access_key.to_string()),
+            ("appkey".to_string(), params.appkey.to_string()),
+            ("build".to_string(), params.build.to_string()),
+            ("c_locale".to_string(), "zh_CN".to_string()),
+            ("channel".to_string(), "master".to_string()),
+            ("device".to_string(), params.device.to_string()),
+            ("disable_rcmd".to_string(), "0".to_string()),
+            ("fnval".to_string(), "4048".to_string()),
+            ("fnver".to_string(), "0".to_string()),
+            ("fourk".to_string(), "1".to_string()),
+            ("highlight".to_string(), "1".to_string()),
+            ("keyword".to_string(), params.keyword.to_string()),
+            ("mobi_app".to_string(), params.mobi_app.to_string()),
+            ("platform".to_string(), params.platform.to_string()),
+            ("pn".to_string(), params.pn.to_string()),
+            ("ps".to_string(), "20".to_string()),
+            ("qn".to_string(), "120".to_string()),
+            ("s_locale".to_string(), "zh_CN".to_string()),
+            ("ts".to_string(), ts_string.to_string()),
+            ("type".to_string(), params.type_param.to_string()),
+        ]
+    };
+
+    if params.is_th && !params.access_key.is_empty() {
+        query_vec.push(("access_key".to_string(), params.access_key.to_string()));
+    }
+    if !params.statistics.is_empty() {
+        query_vec.push(("statistics".to_string(), params.statistics.to_string()));
+    }
+
+    query_vec.sort_by_key(|v| v.0.clone());
+    build_signed_url!(api, query_vec, params.appsec).0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_search_request_url;
+    use crate::mods::types::SearchParams;
+    use qstring::QString;
+
+    #[test]
+    fn app_search_preserves_requested_type() {
+        let params = SearchParams {
+            is_app: true,
+            type_param: "8",
+            keyword: "test",
+            ..Default::default()
+        };
+
+        let url = build_search_request_url(
+            &params,
+            &QString::from("keyword=test&type=8"),
+            "https://example.com/x/v2/search/type",
+            "123456",
+        );
+
+        assert!(url.contains("type=8"));
+        assert!(!url.contains("type=7"));
+    }
+
+    #[test]
+    fn th_search_preserves_requested_type() {
+        let mut params = SearchParams {
+            is_app: true,
+            is_th: true,
+            type_param: "8",
+            keyword: "test",
+            fnval: "976",
+            ..Default::default()
+        };
+        params.appkey_to_sec().unwrap();
+
+        let url = build_search_request_url(
+            &params,
+            &QString::from("keyword=test&type=8"),
+            "https://example.com/intl/gateway/v2/app/search/type",
+            "123456",
+        );
+
+        assert!(url.contains("type=8"));
+        assert!(!url.contains("type=7"));
+    }
+
+    #[test]
+    fn app_search_defaults_to_bangumi_when_type_is_missing() {
+        let params = SearchParams {
+            is_app: true,
+            keyword: "test",
+            ..Default::default()
+        };
+
+        let url = build_search_request_url(
+            &params,
+            &QString::from("keyword=test"),
+            "https://example.com/x/v2/search/type",
+            "123456",
+        );
+
+        assert!(url.contains("type=7"));
+    }
+
+    #[test]
+    fn web_search_keeps_raw_query_unchanged() {
+        let params = SearchParams {
+            is_app: false,
+            ..Default::default()
+        };
+        let raw_query = "area=hk&keyword=test&search_type=media_ft&page=1";
+
+        let url = build_search_request_url(
+            &params,
+            &QString::from(raw_query),
+            "https://example.com/x/web-interface/search/type",
+            "123456",
+        );
+
+        assert_eq!(
+            url,
+            "https://example.com/x/web-interface/search/type?area=hk&keyword=test&search_type=media_ft&page=1"
+        );
     }
 }
 
