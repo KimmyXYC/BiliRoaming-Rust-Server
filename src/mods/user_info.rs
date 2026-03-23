@@ -36,13 +36,7 @@ pub async fn get_user_info(
             }
         }
         None => {
-            match get_upstream_bili_account_info_rec(
-                access_key,
-                client_type,
-                bili_runtime,
-                0,
-            )
-            .await
+            match get_upstream_bili_account_info_rec(access_key, client_type, bili_runtime, 0).await
             {
                 Ok(value) => {
                     debug!(

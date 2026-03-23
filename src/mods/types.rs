@@ -727,19 +727,18 @@ impl<'cache_type> CacheType<'cache_type> {
                 key.push_str(&uid.to_string());
                 key += "20602";
                 keys.push(key);
-            }
-            // CacheType::UserUniqueInfo(access_key, uid) => {
-            //     let mut key = String::with_capacity(64);
-            //     key.push_str("a");
-            //     key.push_str(access_key);
-            //     key += "2001";
-            //     keys.push(key);
-            //     let mut key = String::with_capacity(32);
-            //     key.push_str("u");
-            //     key.push_str(&uid.to_string());
-            //     key += "2001";
-            //     keys.push(key);
-            // },
+            } // CacheType::UserUniqueInfo(access_key, uid) => {
+              //     let mut key = String::with_capacity(64);
+              //     key.push_str("a");
+              //     key.push_str(access_key);
+              //     key += "2001";
+              //     keys.push(key);
+              //     let mut key = String::with_capacity(32);
+              //     key.push_str("u");
+              //     key.push_str(&uid.to_string());
+              //     key += "2001";
+              //     keys.push(key);
+              // },
         };
         keys
     }

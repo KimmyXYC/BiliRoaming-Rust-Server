@@ -49,7 +49,7 @@ pub async fn async_getwebpage(
             .headers(value)
             .header("cookie", cookie)
             .header("Accept-Encoding", "gzip, deflate, br");
-    }else{
+    } else {
         client = client
             .header("cookie", cookie)
             .header("Accept-Encoding", "gzip, deflate, br");

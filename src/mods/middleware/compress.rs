@@ -69,8 +69,15 @@ where
                                 _ => 0,
                             }
                         };
-                    }else{
-                        temp2.1 = (&temp[1].char_indices().filter(|value| value.0 >= 2).map(|value| value.1).collect::<String>().parse::<f32>().unwrap() * 10.0) as i32;
+                    } else {
+                        temp2.1 = (&temp[1]
+                            .char_indices()
+                            .filter(|value| value.0 >= 2)
+                            .map(|value| value.1)
+                            .collect::<String>()
+                            .parse::<f32>()
+                            .unwrap()
+                            * 10.0) as i32;
                     }
                     temp2
                 })
@@ -83,8 +90,7 @@ where
                 .map(|header_value| &header_value.0[..])
                 .collect::<Vec<_>>();
             if accept_encodings.len() >= 2 {
-                *headers.get_mut("Accept-Encoding").unwrap() =
-                    accept_encodings[0].parse().unwrap();
+                *headers.get_mut("Accept-Encoding").unwrap() = accept_encodings[0].parse().unwrap();
             } else if accept_encodings.len() == 0 {
                 headers.remove("Accept-Encoding");
             } else if accept_encodings[0] == "*" {

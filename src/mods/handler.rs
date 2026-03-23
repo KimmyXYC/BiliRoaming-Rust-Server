@@ -617,7 +617,9 @@ pub async fn handle_th_season_request(
     params.access_key = match query.get("access_key") {
         Some(key) => {
             if key.len() < 32 {
-                error!("[GET TH SEASON] IP {client_ip} -> Detect req with invalid access_key {key}");
+                error!(
+                    "[GET TH SEASON] IP {client_ip} -> Detect req with invalid access_key {key}"
+                );
                 build_response!(EType::UserNotLoginedError);
             } else {
                 key.split_at(32).0

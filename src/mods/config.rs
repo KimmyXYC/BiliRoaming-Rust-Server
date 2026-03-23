@@ -83,11 +83,15 @@ fn load_biliconfig(config_type: Option<&str>) -> Result<BiliConfig, String> {
 pub async fn prepare_before_start(bili_runtime: BiliRuntime<'_>) {
     // set resign_info
     if bili_runtime.config.cn_resign_info.access_key != "".to_owned() {
-        bili_runtime.redis_set("a11101", &bili_runtime.config.cn_resign_info.to_json(), 0).await;
+        bili_runtime
+            .redis_set("a11101", &bili_runtime.config.cn_resign_info.to_json(), 0)
+            .await;
     }
 
     if bili_runtime.config.th_resign_info.access_key != "".to_owned() {
-        bili_runtime.redis_set("a41101", &bili_runtime.config.th_resign_info.to_json(), 0).await;
+        bili_runtime
+            .redis_set("a41101", &bili_runtime.config.th_resign_info.to_json(), 0)
+            .await;
     }
 }
 
@@ -107,7 +111,7 @@ pub fn load_sslconfig() -> Result<rustls::ServerConfig, Box<dyn std::error::Erro
         .map(|key| PrivateKey(key))
         .collect::<Vec<PrivateKey>>();
 
-    debug!("{:?}",keys);
+    debug!("{:?}", keys);
 
     let config = ServerConfig::builder()
         .with_safe_default_cipher_suites()
@@ -120,16 +124,16 @@ pub fn load_sslconfig() -> Result<rustls::ServerConfig, Box<dyn std::error::Erro
     Ok(config)
 }
 
-pub async fn update_biliconfig() -> Result<bool,Box<dyn std::error::Error>> {
+pub async fn update_biliconfig() -> Result<bool, Box<dyn std::error::Error>> {
     use tokio::fs;
 
-    async fn read_config_json() -> Result<serde_json::Value,Box<dyn std::error::Error>> {
+    async fn read_config_json() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let config = fs::read_to_string("config.json").await?;
         let config: serde_json::Value = serde_json::from_str(&config)?;
         Ok(config)
     }
 
-    async fn read_config_yaml() -> Result<serde_yaml::Value,Box<dyn std::error::Error>> {
+    async fn read_config_yaml() -> Result<serde_yaml::Value, Box<dyn std::error::Error>> {
         let config = fs::read_to_string("config.yaml").await?;
         let config: serde_yaml::Value = serde_yaml::from_str(&config)?;
         Ok(config)
