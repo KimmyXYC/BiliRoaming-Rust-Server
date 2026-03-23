@@ -5,6 +5,31 @@ use pcre2::bytes::Regex;
 use rand::Rng;
 use std::u8;
 
+const BSTAR_SEASON_URI_PREFIX: &str = "bstar://pgc/season/";
+const BILIBILI_BANGUMI_SS_PREFIX: &str = "https://www.bilibili.com/bangumi/play/ss";
+
+#[inline]
+pub fn normalize_th_search_season_uris(data: &mut serde_json::Value) {
+    match data {
+        serde_json::Value::String(value) => {
+            if let Some(suffix) = value.strip_prefix(BSTAR_SEASON_URI_PREFIX) {
+                *value = format!("{BILIBILI_BANGUMI_SS_PREFIX}{suffix}");
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                normalize_th_search_season_uris(item);
+            }
+        }
+        serde_json::Value::Object(object) => {
+            for value in object.values_mut() {
+                normalize_th_search_season_uris(value);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[inline]
 pub fn check_vip_status_from_playurl(
     playurl_type: PlayurlType,
@@ -609,4 +634,60 @@ pub fn spawn_random_accesskey(len: usize) -> String {
         secret.push(dist[rng.gen_range(0..16)]);
     }
     secret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_th_search_season_uris;
+    use serde_json::json;
+
+    #[test]
+    fn normalize_th_search_season_uris_rewrites_nested_matches() {
+        let mut data = json!({
+            "uri": "bstar://pgc/season/39010/",
+            "items": [
+                {
+                    "url": "bstar://pgc/season/39011",
+                    "episodes": [
+                        {
+                            "uri": "https://www.bilibili.com/bangumi/play/ep1"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        normalize_th_search_season_uris(&mut data);
+
+        assert_eq!(
+            data["uri"].as_str().unwrap(),
+            "https://www.bilibili.com/bangumi/play/ss39010/"
+        );
+        assert_eq!(
+            data["items"][0]["url"].as_str().unwrap(),
+            "https://www.bilibili.com/bangumi/play/ss39011"
+        );
+        assert_eq!(
+            data["items"][0]["episodes"][0]["uri"].as_str().unwrap(),
+            "https://www.bilibili.com/bangumi/play/ep1"
+        );
+    }
+
+    #[test]
+    fn normalize_th_search_season_uris_ignores_non_matching_values() {
+        let original = json!({
+            "uri": "bstar://pgc/episode/39010",
+            "title": "test",
+            "count": 1,
+            "ok": true,
+            "nested": {
+                "url": "https://example.com"
+            }
+        });
+        let mut data = original.clone();
+
+        normalize_th_search_season_uris(&mut data);
+
+        assert_eq!(data, original);
+    }
 }

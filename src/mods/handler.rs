@@ -2,6 +2,7 @@ use super::cache::{
     get_cached_ep_area, get_cached_playurl, get_cached_th_season, get_cached_th_subtitle,
 };
 use super::health::report_health;
+use super::tools::normalize_th_search_season_uris;
 use super::types::{
     random_string, Area, BackgroundTaskType, BiliConfig, BiliRuntime, ClientType, EType,
     HealthData, HealthReportType, PlayurlParams, RuntimeHealthKey, SearchParams,
@@ -523,29 +524,28 @@ pub async fn handle_search_request(req: &HttpRequest, is_app: bool, is_th: bool)
     );
     let mut body_data_json: serde_json::Value =
         match get_upstream_bili_search(&params, &query, &bili_runtime).await {
-            Ok(value) => {
-                if params.pn != "1" {
-                    build_response!(value);
-                };
-                // if !is_app {
-                //     return build_response(value);
-                // }
-                value
-            }
+            Ok(value) => value,
             Err(value) => build_response!(value),
         };
+
+    if params.pn != "1" {
+        normalize_search_response(&mut body_data_json, is_app, is_th);
+        build_response!(body_data_json);
+    }
 
     let search_remake_date = {
         if is_app {
             if let Some(value) = config.appsearch_remake.get(host) {
                 value
             } else {
+                normalize_search_response(&mut body_data_json, is_app, is_th);
                 build_response!(body_data_json);
             }
         } else {
             if let Some(value) = config.websearch_remake.get(host) {
                 value
             } else {
+                normalize_search_response(&mut body_data_json, is_app, is_th);
                 build_response!(body_data_json);
             }
         }
@@ -580,7 +580,14 @@ pub async fn handle_search_request(req: &HttpRequest, is_app: bool, is_th: bool)
         }
     }
 
+    normalize_search_response(&mut body_data_json, is_app, is_th);
     build_response!(body_data_json);
+}
+
+fn normalize_search_response(body_data_json: &mut serde_json::Value, is_app: bool, is_th: bool) {
+    if is_app && is_th {
+        normalize_th_search_season_uris(body_data_json);
+    }
 }
 
 pub async fn handle_th_season_request(
@@ -858,9 +865,9 @@ pub async fn errorurl_reg(url: &str) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::handle_api_health_request;
+    use super::{handle_api_health_request, normalize_search_response};
     use actix_web::{body::to_bytes, test::TestRequest};
-    use serde_json::Value;
+    use serde_json::{json, Value};
 
     #[actix_web::test]
     async fn api_health_returns_default_runtime_snapshot() {
@@ -883,6 +890,43 @@ mod tests {
         let body_json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body_json["code"].as_i64().unwrap(), 400);
+    }
+
+    #[test]
+    fn search_normalization_rewrites_links_for_th_app_only() {
+        let original = json!({
+            "data": {
+                "items": [
+                    {
+                        "uri": "bstar://pgc/season/39010/",
+                        "nested": {
+                            "url": "bstar://pgc/season/39011"
+                        }
+                    }
+                ]
+            }
+        });
+
+        let mut th_app = original.clone();
+        normalize_search_response(&mut th_app, true, true);
+        assert_eq!(
+            th_app["data"]["items"][0]["uri"].as_str().unwrap(),
+            "https://www.bilibili.com/bangumi/play/ss39010/"
+        );
+        assert_eq!(
+            th_app["data"]["items"][0]["nested"]["url"]
+                .as_str()
+                .unwrap(),
+            "https://www.bilibili.com/bangumi/play/ss39011"
+        );
+
+        let mut non_th_app = original.clone();
+        normalize_search_response(&mut non_th_app, true, false);
+        assert_eq!(non_th_app, original);
+
+        let mut th_web = original.clone();
+        normalize_search_response(&mut th_web, false, true);
+        assert_eq!(th_web, original);
     }
 }
 
