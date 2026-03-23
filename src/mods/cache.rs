@@ -156,7 +156,7 @@ pub fn check_ep_available(http_body_json: &serde_json::Value) -> bool {
     // 此处判断来自 @cxw620
     // let http_body_json: serde_json::Value = serde_json::from_str(http_body).unwrap();
     let code = http_body_json["code"].as_i64().unwrap_or(233);
-    let message = http_body_json["message"].as_str().unwrap_or("").clone();
+    let message = http_body_json["message"].as_str().unwrap_or("");
     /*
         {"code":10015002,"message":"访问权限不足","ttl":1}
         {"code":-10403,"message":"大会员专享限制"}

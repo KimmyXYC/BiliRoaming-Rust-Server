@@ -8,7 +8,7 @@ use chrono::{FixedOffset, Local, TimeZone, Utc};
 use deadpool_redis::Pool;
 use lazy_static::lazy_static;
 use log::error;
-use rand::Rng;
+use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -898,10 +898,9 @@ macro_rules! calc_md5 {
 /// + 用例: `random_string!(range, charset)`
 macro_rules! random_string {
     ($range: expr, $charset: expr) => {{
-        let mut rng = rand::thread_rng();
         (0..$range)
             .map(|_| {
-                let idx = rand::Rng::gen_range(&mut rng, 0..$charset.len());
+                let idx = rand::random_range(0..$charset.len());
                 $charset[idx] as char
             })
             .collect::<String>()
@@ -2033,11 +2032,7 @@ fn default_app_bilibili_com() -> String {
 }
 
 pub fn random_string() -> String {
-    let rand_sign = rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
-        .take(8)
-        .map(char::from)
-        .collect::<String>();
+    let rand_sign = Alphanumeric.sample_string(&mut rand::rng(), 8);
     format!("{}", rand_sign)
 }
 
@@ -2217,18 +2212,18 @@ impl FakeUA {
             ("9", "BND-AL10", "HONORBND-AL10"),
             ("9", "ALP-AL00", "HUAWEIALP-AL00"),
         ];
-        phones[rand::thread_rng().gen_range(0..=14)]
+        phones[rand::random_range(0..phones.len())]
     }
     #[inline]
     pub fn gen(&self) -> String {
         match self {
             FakeUA::Web => {
                 // 非常粗暴的做法
-                format!("Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{}.0.0.0 Safari/537.36", rand::thread_rng().gen_range(90..=108))
+                format!("Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{}.0.0.0 Safari/537.36", rand::random_range(90..=108))
             }
             FakeUA::Mobile => {
                 let phone = FakeUA::gen_random_phone();
-                format!("Mozilla/5.0 (Linux; U; Android {}; {} Build/{}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{}.0.0.0 Mobile Safari/537.36", phone.0, phone.1, phone.2, rand::thread_rng().gen_range(90..=108))
+                format!("Mozilla/5.0 (Linux; U; Android {}; {} Build/{}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{}.0.0.0 Mobile Safari/537.36", phone.0, phone.1, phone.2, rand::random_range(90..=108))
             } //虽然暂时用不到
             FakeUA::App => {
                 // 性能考虑才这么写, 虽然只是快一点, 100次循环format!()是7,073 ns/iter (+/- 277), String::with_capacity是2,387 ns/iter (+/- 163).
@@ -2424,7 +2419,7 @@ impl PlayurlParamsStatic {
             PlayurlType::ChinaWeb
         }
     }
-    pub fn as_ref(&self) -> PlayurlParams {
+    pub fn as_ref(&self) -> PlayurlParams<'_> {
         PlayurlParams {
             access_key: &self.access_key,
             appkey: &self.appkey,

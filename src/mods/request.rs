@@ -162,7 +162,7 @@ pub async fn redis_set(redis: &Pool, key: &str, value: &str, expire_time: u64) -
     if expire_time != 0 {
         match cmd("SETEX")
             .arg(&[key, &format!("{expire_time}"), value])
-            .query_async::<_, ()>(&mut conn)
+            .query_async::<()>(&mut conn)
             .await
         {
             Ok(_) => Some(()),
@@ -171,7 +171,7 @@ pub async fn redis_set(redis: &Pool, key: &str, value: &str, expire_time: u64) -
     } else {
         match cmd("SET")
             .arg(&[key, value])
-            .query_async::<_, ()>(&mut conn)
+            .query_async::<()>(&mut conn)
             .await
         {
             Ok(_) => Some(()),

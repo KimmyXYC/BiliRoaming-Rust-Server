@@ -2,7 +2,6 @@ use super::types::{ClientType, PlayurlType};
 use base64::prelude::*;
 use log::{debug, error};
 use pcre2::bytes::Regex;
-use rand::Rng;
 use std::u8;
 
 const BSTAR_SEASON_URI_PREFIX: &str = "bstar://pgc/season/";
@@ -625,13 +624,12 @@ pub fn eid_to_mid(eid: &str) -> Result<String, ()> {
 }
 
 pub fn spawn_random_accesskey(len: usize) -> String {
-    let mut rng = rand::thread_rng();
     let dist = [
         '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'a', 'b', 'c', 'd', 'e', 'f',
     ];
     let mut secret = String::new();
     for _ in 0..len {
-        secret.push(dist[rng.gen_range(0..16)]);
+        secret.push(dist[rand::random_range(0..16)]);
     }
     secret
 }

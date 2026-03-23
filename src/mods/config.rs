@@ -1,11 +1,8 @@
+use super::types::{BiliConfig, BiliRuntime};
 use std::{
     fs::{self, File},
     path::Path,
 };
-
-use log::debug;
-
-use super::types::{BiliConfig, BiliRuntime};
 pub fn init_biliconfig() -> BiliConfig {
     let mut config_type: Option<&str> = None;
     let config_suffix = ["json", "yml"];
@@ -96,30 +93,19 @@ pub async fn prepare_before_start(bili_runtime: BiliRuntime<'_>) {
 }
 
 pub fn load_sslconfig() -> Result<rustls::ServerConfig, Box<dyn std::error::Error>> {
-    use rustls::{Certificate, PrivateKey, ServerConfig};
+    use rustls::ServerConfig;
     use std::io::BufReader;
 
     let mut cert_file = BufReader::new(File::open("certificates/fullchain.pem")?);
     let mut private_key_file = BufReader::new(File::open("certificates/privkey.pem")?);
 
-    let cert_chain = rustls_pemfile::certs(&mut cert_file)?
-        .into_iter()
-        .map(|cert| Certificate(cert))
-        .collect::<Vec<Certificate>>();
-    let mut keys = rustls_pemfile::ec_private_keys(&mut private_key_file)?
-        .into_iter()
-        .map(|key| PrivateKey(key))
-        .collect::<Vec<PrivateKey>>();
-
-    debug!("{:?}", keys);
+    let cert_chain = rustls_pemfile::certs(&mut cert_file).collect::<Result<Vec<_>, _>>()?;
+    let key = rustls_pemfile::private_key(&mut private_key_file)?
+        .ok_or("no private keys found in certificates/privkey.pem")?;
 
     let config = ServerConfig::builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_no_client_auth()
-        .with_single_cert(cert_chain, keys.remove(0))?;
+        .with_single_cert(cert_chain, key)?;
 
     Ok(config)
 }

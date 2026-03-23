@@ -197,7 +197,7 @@ fn main() -> std::io::Result<()> {
                 buf,
                 "[{}][{:>5}] {}",
                 Local::now().format("%Y-%m-%d %H:%M:%S"),
-                buf.default_styled_level(record.level()),
+                record.level(),
                 &record.args()
             )
         })
@@ -265,7 +265,7 @@ fn main() -> std::io::Result<()> {
         server_config.rate_limit_burst
     };
     let rate_limit_conf = GovernorConfigBuilder::default()
-        .per_second(rate_limit_per_second)
+        .requests_per_second(rate_limit_per_second)
         .burst_size(rate_limit_burst)
         .key_extractor(BiliUserToken)
         .finish()
@@ -310,7 +310,7 @@ fn main() -> std::io::Result<()> {
                 .service(Files::new("/", "./web/").index_file("index.html"))
                 .default_service(web::route().to(web_default))
         })
-        .bind_rustls(("0.0.0.0", https_port), ssl_config.unwrap())
+        .bind_rustls_0_23(("0.0.0.0", https_port), ssl_config.unwrap())
         .unwrap()
         .workers(woker_num)
         .keep_alive(Duration::from_secs(20))
@@ -352,7 +352,7 @@ fn main() -> std::io::Result<()> {
                 .service(Files::new("/", "./web/").index_file("index.html"))
                 .default_service(web::route().to(web_default))
         })
-        .bind_rustls(("0.0.0.0", https_port), ssl_config.unwrap())
+        .bind_rustls_0_23(("0.0.0.0", https_port), ssl_config.unwrap())
         .unwrap()
         .workers(woker_num)
         .keep_alive(Duration::from_secs(20))
