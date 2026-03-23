@@ -6,10 +6,15 @@ use actix_web::HttpRequest;
 use async_channel::{Sender, TrySendError};
 use chrono::{FixedOffset, Local, TimeZone, Utc};
 use deadpool_redis::Pool;
+use lazy_static::lazy_static;
 use log::error;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, hash::Hash, sync::Arc};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    sync::{Arc, RwLock},
+};
 use urlencoding::encode;
 
 /*
@@ -1170,7 +1175,302 @@ impl HealthReportType {
             HealthReportType::Others(_) => None,
         }
     }
+    pub fn runtime_health_key(&self) -> Option<RuntimeHealthKey> {
+        match self {
+            HealthReportType::Playurl(value) => Some(RuntimeHealthKey {
+                kind: RuntimeHealthKind::Playurl,
+                area_num: value.area_num,
+            }),
+            HealthReportType::Search(value) => Some(RuntimeHealthKey {
+                kind: RuntimeHealthKind::Search,
+                area_num: value.area_num,
+            }),
+            HealthReportType::ThSeason(value) => Some(RuntimeHealthKey {
+                kind: RuntimeHealthKind::Season,
+                area_num: value.area_num,
+            }),
+            HealthReportType::Others(_) => None,
+        }
+    }
+    pub fn runtime_health_status(&self) -> (i64, String) {
+        if self.is_available() {
+            return (0, "0".to_string());
+        }
+
+        let health_data = match self {
+            HealthReportType::Playurl(value) => value,
+            HealthReportType::Search(value) => value,
+            HealthReportType::ThSeason(value) => value,
+            HealthReportType::Others(value) => value,
+        };
+
+        let code = if health_data.upstream_reply.code == -2333 {
+            -500
+        } else {
+            health_data.upstream_reply.code
+        };
+        let message = if health_data.is_custom && !health_data.custom_message.is_empty() {
+            health_data.custom_message.clone()
+        } else if !health_data.upstream_reply.message.is_empty()
+            && health_data.upstream_reply.message != "default null"
+        {
+            health_data.upstream_reply.message.clone()
+        } else {
+            "health check failed".to_string()
+        };
+
+        (code, message)
+    }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RuntimeHealthKind {
+    Playurl,
+    Search,
+    Season,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RuntimeHealthKey {
+    pub kind: RuntimeHealthKind,
+    pub area_num: u8,
+}
+
+impl RuntimeHealthKey {
+    pub fn from_api_query(area: &str, health_type: &str) -> Option<Self> {
+        let area_num = match area {
+            "cn" => 1,
+            "hk" => 2,
+            "tw" => 3,
+            "th" => 4,
+            _ => return None,
+        };
+
+        let kind = match health_type {
+            "playurl" => RuntimeHealthKind::Playurl,
+            "search" => RuntimeHealthKind::Search,
+            "season" if area_num == 4 => RuntimeHealthKind::Season,
+            _ => return None,
+        };
+
+        Some(Self { kind, area_num })
+    }
+
+    fn defaults() -> [Self; 9] {
+        [
+            Self {
+                kind: RuntimeHealthKind::Playurl,
+                area_num: 1,
+            },
+            Self {
+                kind: RuntimeHealthKind::Playurl,
+                area_num: 2,
+            },
+            Self {
+                kind: RuntimeHealthKind::Playurl,
+                area_num: 3,
+            },
+            Self {
+                kind: RuntimeHealthKind::Playurl,
+                area_num: 4,
+            },
+            Self {
+                kind: RuntimeHealthKind::Search,
+                area_num: 1,
+            },
+            Self {
+                kind: RuntimeHealthKind::Search,
+                area_num: 2,
+            },
+            Self {
+                kind: RuntimeHealthKind::Search,
+                area_num: 3,
+            },
+            Self {
+                kind: RuntimeHealthKind::Search,
+                area_num: 4,
+            },
+            Self {
+                kind: RuntimeHealthKind::Season,
+                area_num: 4,
+            },
+        ]
+    }
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct RuntimeHealthApiData {
+    pub last_check: String,
+    pub counter: u64,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct RuntimeHealthApiResponse {
+    pub code: i64,
+    pub message: String,
+    pub data: RuntimeHealthApiData,
+}
+
+#[derive(Clone, Debug)]
+struct RuntimeHealthState {
+    code: i64,
+    message: String,
+    data: RuntimeHealthApiData,
+}
+
+impl Default for RuntimeHealthState {
+    fn default() -> Self {
+        Self {
+            code: 0,
+            message: "0".to_string(),
+            data: RuntimeHealthApiData {
+                last_check: Local::now().to_rfc3339(),
+                counter: 0,
+            },
+        }
+    }
+}
+
+impl RuntimeHealthState {
+    fn update(&mut self, code: i64, message: &str) {
+        self.data.last_check = Local::now().to_rfc3339();
+        self.message = message.to_string();
+
+        if code == 0 {
+            self.code = 0;
+            self.data.counter = 0;
+            return;
+        }
+
+        self.data.counter += 1;
+        if self.data.counter > 3 {
+            self.code = code;
+        }
+    }
+
+    fn to_response(&self) -> RuntimeHealthApiResponse {
+        RuntimeHealthApiResponse {
+            code: self.code,
+            message: self.message.clone(),
+            data: self.data.clone(),
+        }
+    }
+}
+
+pub struct RuntimeHealthStore {
+    inner: RwLock<HashMap<RuntimeHealthKey, RuntimeHealthState>>,
+}
+
+impl Default for RuntimeHealthStore {
+    fn default() -> Self {
+        let mut inner = HashMap::new();
+        for key in RuntimeHealthKey::defaults() {
+            inner.insert(key, RuntimeHealthState::default());
+        }
+        Self {
+            inner: RwLock::new(inner),
+        }
+    }
+}
+
+impl RuntimeHealthStore {
+    fn update_status(&self, key: RuntimeHealthKey, code: i64, message: &str) {
+        let mut inner = self.inner.write().unwrap();
+        inner
+            .entry(key)
+            .or_insert_with(RuntimeHealthState::default)
+            .update(code, message);
+    }
+
+    pub fn update_from_report(&self, report: &HealthReportType) {
+        if let Some(key) = report.runtime_health_key() {
+            let (code, message) = report.runtime_health_status();
+            self.update_status(key, code, &message);
+        }
+    }
+
+    pub fn snapshot(&self, key: RuntimeHealthKey) -> RuntimeHealthApiResponse {
+        self.inner
+            .read()
+            .unwrap()
+            .get(&key)
+            .cloned()
+            .unwrap_or_default()
+            .to_response()
+    }
+}
+
+lazy_static! {
+    pub static ref RUNTIME_HEALTH_STORE: RuntimeHealthStore = RuntimeHealthStore::default();
+}
+
+#[cfg(test)]
+mod runtime_health_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_health_key_parses_supported_api_queries() {
+        assert_eq!(
+            RuntimeHealthKey::from_api_query("cn", "playurl"),
+            Some(RuntimeHealthKey {
+                kind: RuntimeHealthKind::Playurl,
+                area_num: 1,
+            })
+        );
+        assert_eq!(
+            RuntimeHealthKey::from_api_query("th", "search"),
+            Some(RuntimeHealthKey {
+                kind: RuntimeHealthKind::Search,
+                area_num: 4,
+            })
+        );
+        assert_eq!(
+            RuntimeHealthKey::from_api_query("th", "season"),
+            Some(RuntimeHealthKey {
+                kind: RuntimeHealthKind::Season,
+                area_num: 4,
+            })
+        );
+        assert_eq!(RuntimeHealthKey::from_api_query("hk", "season"), None);
+        assert_eq!(RuntimeHealthKey::from_api_query("oops", "playurl"), None);
+        assert_eq!(RuntimeHealthKey::from_api_query("cn", "oops"), None);
+    }
+
+    #[test]
+    fn runtime_health_store_matches_go_failure_threshold() {
+        let store = RuntimeHealthStore::default();
+        let key = RuntimeHealthKey {
+            kind: RuntimeHealthKind::Playurl,
+            area_num: 1,
+        };
+
+        let initial = store.snapshot(key);
+        assert_eq!(initial.code, 0);
+        assert_eq!(initial.message, "0");
+        assert_eq!(initial.data.counter, 0);
+
+        for expected_counter in 1..=3 {
+            store.update_status(key, -404, "not found");
+            let snapshot = store.snapshot(key);
+            assert_eq!(snapshot.code, 0);
+            assert_eq!(snapshot.message, "not found");
+            assert_eq!(snapshot.data.counter, expected_counter);
+        }
+
+        store.update_status(key, -404, "not found");
+        let degraded = store.snapshot(key);
+        assert_eq!(degraded.code, -404);
+        assert_eq!(degraded.message, "not found");
+        assert_eq!(degraded.data.counter, 4);
+
+        store.update_status(key, 0, "0");
+        let recovered = store.snapshot(key);
+        assert_eq!(recovered.code, 0);
+        assert_eq!(recovered.message, "0");
+        assert_eq!(recovered.data.counter, 0);
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ReportConfig {
     TgBot(ReportConfigTgBot),

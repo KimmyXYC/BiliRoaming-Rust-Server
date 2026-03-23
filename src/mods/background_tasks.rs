@@ -7,6 +7,7 @@ use super::tools::get_user_mid_from_playurl;
 use super::types::{
     Area, BackgroundTaskType, BiliRuntime, CacheTask, CacheType, EType, EpInfo, FakeUA,
     HealthReportType, HealthTask, PlayurlParams, PlayurlParamsStatic, ReqType, UserInfo,
+    RUNTIME_HEALTH_STORE,
 };
 use super::upstream_res::*;
 use chrono::Local;
@@ -133,6 +134,7 @@ pub async fn background_task_run(
                 Ok(())
             }
             HealthTask::HealthReport(value) => {
+                RUNTIME_HEALTH_STORE.update_from_report(&value);
                 if config.report_open {
                     let max_num_of_err = 2u16;
                     let area_num_vec = ["", "1", "2", "3", "4"];

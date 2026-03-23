@@ -4,7 +4,8 @@ use super::cache::{
 use super::health::report_health;
 use super::types::{
     random_string, Area, BackgroundTaskType, BiliConfig, BiliRuntime, ClientType, EType,
-    HealthData, HealthReportType, PlayurlParams, SearchParams,
+    HealthData, HealthReportType, PlayurlParams, RuntimeHealthKey, SearchParams,
+    RUNTIME_HEALTH_STORE,
 };
 use super::upstream_res::{
     get_upstream_bili_playurl, get_upstream_bili_search, get_upstream_bili_season,
@@ -780,6 +781,33 @@ pub async fn handle_api_access_key_request(req: &HttpRequest) -> HttpResponse {
     ))
 }
 
+pub async fn handle_api_health_request(req: &HttpRequest) -> HttpResponse {
+    let query = QString::from(req.query_string());
+    let area = match query.get("area") {
+        Some(value) => value,
+        None => {
+            build_response!(r#"{"code":400,"message":"缺少 area 参数！"}"#.to_string());
+        }
+    };
+    let health_type = match query.get("type") {
+        Some(value) => value,
+        None => {
+            build_response!(r#"{"code":400,"message":"缺少 type 参数！"}"#.to_string());
+        }
+    };
+
+    let key = match RuntimeHealthKey::from_api_query(area, health_type) {
+        Some(value) => value,
+        None => {
+            build_response!(r#"{"code":400,"message":"参数错误！"}"#.to_string());
+        }
+    };
+
+    let body = serde_json::to_string(&RUNTIME_HEALTH_STORE.snapshot(key))
+        .unwrap_or_else(|_| r#"{"code":500,"message":"服务器内部错误"}"#.to_string());
+    build_response!(body)
+}
+
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -825,6 +853,36 @@ pub async fn errorurl_reg(url: &str) -> Option<u8> {
         "/intl/gateway/v2/app/subtitle" => Some(8),
         "/pgc/view/v2/app/season" => Some(9),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handle_api_health_request;
+    use actix_web::{body::to_bytes, test::TestRequest};
+    use serde_json::Value;
+
+    #[actix_web::test]
+    async fn api_health_returns_default_runtime_snapshot() {
+        let req = TestRequest::with_uri("/api/health?area=cn&type=playurl").to_http_request();
+        let resp = handle_api_health_request(&req).await;
+        let body = to_bytes(resp.into_body()).await.unwrap();
+        let body_json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body_json["code"].as_i64().unwrap(), 0);
+        assert_eq!(body_json["message"].as_str().unwrap(), "0");
+        assert_eq!(body_json["data"]["counter"].as_u64().unwrap(), 0);
+        assert!(!body_json["data"]["last_check"].as_str().unwrap().is_empty());
+    }
+
+    #[actix_web::test]
+    async fn api_health_rejects_invalid_area_type_pair() {
+        let req = TestRequest::with_uri("/api/health?area=hk&type=season").to_http_request();
+        let resp = handle_api_health_request(&req).await;
+        let body = to_bytes(resp.into_body()).await.unwrap();
+        let body_json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body_json["code"].as_i64().unwrap(), 400);
     }
 }
 
